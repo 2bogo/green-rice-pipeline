@@ -1,7 +1,7 @@
 # green-rice-pipeline
 
 ### directory layout
-
+```
 .
 ├── assembly
 │   ├── Snakefile
@@ -19,3 +19,4 @@
     │   ├── baegilmi.fastq.gz
     │   └── ...
     └── ref
+```
