@@ -1,0 +1,48 @@
+BASE_DIR = './'
+ONT_PATH = "/data/yeah-zin/greenRice2/seq/ont/"
+MGI_PATH = "/data/yeah-zin/greenRice2/seq/mgi/"
+
+LRS_PATH = "~/Downloads/lrscaf/target/"
+
+workdir: BASE_DIR
+
+SAMPLES, = glob_wildcards(ONT_PATH + "{sample}.fastq.gz")
+
+rule all:
+    input: expand("{sample}/scaffolding/scaffolds.fasta", sample=SAMPLES)
+
+rule assembly:
+    input:
+        ONT_PATH + "{sample}.fastq.gz"
+    output:
+        "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta"
+    shell: """
+        mkdir -p {wildcards.sample}/denovo
+        ls {ONT_PATH}/{wildcards.sample}.fastq.gz > {wildcards.sample}/denovo/input.fofn
+        cp script/run.cfv {wildcards.sample}/denovo/
+        nextDenovo {wildcards.sample}/denovo/run.cfv
+    """
+
+rule polishing:
+    input:
+        "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta"
+    output:
+        "{sample}/polishing/01_rundir/genome.nextpolish.fasta"
+    shell: """
+        mkdir -p {wildcards.sample}/polishing
+        ls {MGI_PATH}/{wildcards.sample}/* > {wildcards.sample}/polishing/sgs.fofn
+        cp script/run.cfg {wildcards.sample}/polishing/
+        nextPolish {wildcards.sample}/polishing/run.cfg
+    """
+
+rule scaffolding:
+    input:
+        target = "{sample}/polishing/01_rundir/genome.nextpolish.fasta", query = ONT_PATH + "{sample}.fastq.gz"
+    output:
+        "{sample}/scaffolding/scaffolds.fasta"
+    shell: """
+        mkdir -p {wildcards.sample}/scaffolding
+        minimap2 -d {wildcards.sample}/scaffolding/target.mmi {input.target}
+        minimap2 -t 8 {wildcards.sample}/scaffolding/target.mmi {input.query} > {wildcards.sample}/scaffolding/aln.mm
+        java -jar {LRS_PATH}LRScaf-1.1.12.jar -c {input.target} -a {wildcards.sample}/scaffolding/aln.mm -t mm -o {wildcards.sample}/scaffolding
+    """
