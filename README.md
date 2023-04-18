@@ -8,9 +8,11 @@
 │   ├── script
 │   │   ├── run.cfg
 │   │   └── run.cfv
-│   └── baegilmi
+│   ├── baegilmi
+│   └── ...
 │
-├── analysis/N_statistics.py
+├── analysis
+│   └── N_statistics.py
 └── seq
     ├── mgi
     │    ├── baegilmi
