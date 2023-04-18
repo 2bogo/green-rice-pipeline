@@ -1,6 +1,7 @@
 BASE_DIR = './'
 ONT_PATH = "/data/yeah-zin/greenRice2/seq/ont/"
 MGI_PATH = "/data/yeah-zin/greenRice2/seq/mgi/"
+REF_PATH = "/data/yeah-zin/greenRice2/seq/ref/"
 
 LRS_PATH = "~/Downloads/lrscaf/target/"
 
@@ -9,7 +10,7 @@ workdir: BASE_DIR
 SAMPLES, = glob_wildcards(ONT_PATH + "{sample}.fastq.gz")
 
 rule all:
-    input: expand("{sample}/scaffolding/scaffolds.fasta", sample=SAMPLES)
+    input: expand("{sample}/busco/short_summary.specific.liliopsida_odb10.{sample}.txt", sample=SAMPLES)
 
 rule assembly:
     input:
@@ -45,4 +46,25 @@ rule scaffolding:
         minimap2 -d {wildcards.sample}/scaffolding/target.mmi {input.target}
         minimap2 -t 8 {wildcards.sample}/scaffolding/target.mmi {input.query} > {wildcards.sample}/scaffolding/aln.mm
         java -jar {LRS_PATH}LRScaf-1.1.12.jar -c {input.target} -a {wildcards.sample}/scaffolding/aln.mm -t mm -o {wildcards.sample}/scaffolding
+    """
+
+rule ragtag:
+    input:
+        query = "{sample}/scaffolding/scaffolds.fasta", ref = REF_PATH + "Osativa_323_v7.0.fa.gz"
+    output:
+        "{sample}/ragtag/ref.guide.scaffold.fasta"
+    shell: """
+        mkdir -p {wildcards.sample}/ragtag
+        ragtag.py scaffold -o {wildcards.sample}/ragtag {input.ref} {input.query}
+        sed 's/_RagTag//g' {wildcards.sample}/ragtag/ragtag.scaffold.fasta > {wildcards.sample}/ragtag/ref.guide.scaffold.fasta
+    """
+
+rule busco:
+    input:
+        target = "{sample}/ragtag/ref.guide.scaffold.fasta"
+    output:
+        "{sample}/busco/short_summary.specific.liliopsida_odb10.{sample}.txt"
+    shell: """
+        mkdir -p {wildcards.sample}/busco
+        busco -f -c 10 -i {input.target} -o {wildcards.sample}/busco  -m genome -l liliopsida_odb10 --augustus --long
     """
