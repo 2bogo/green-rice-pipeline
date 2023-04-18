@@ -43,14 +43,6 @@ def calc_contig_n(file_path):
     return output_list + n_output_list[::-1]
 
 
-
-
-
-
-
-
-
-
 def main(args):
     data = [calc_contig_n(f) for f in args.file_list]
 
