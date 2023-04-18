@@ -9,6 +9,8 @@
 │   │   ├── run.cfg
 │   │   └── run.cfv
 │   └── baegilmi
+│
+├── analysis/N_statistics.py
 └── seq
     ├── mgi
     │    ├── baegilmi
