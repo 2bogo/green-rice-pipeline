@@ -59,6 +59,14 @@ rule ragtag:
         sed 's/_RagTag//g' {wildcards.sample}/ragtag/ragtag.scaffold.fasta > {wildcards.sample}/ragtag/ref.guide.scaffold.fasta
     """
 
+rule statistics:
+    input:
+        denovo = "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta", polish = "{sample}/polishing/01_rundir/genome.nextpolish.fasta",
+        scaffold = "{sample}/scaffolding/scaffolds.fasta", ragtag="{sample}/ragtag/ref.guide.scaffold.fasta"
+    output:
+        "{sample}/N_statistics.csv"
+    shell: "python3 ../analysis/N_statistics.py {input.denovo} {input.polish} {input.scaffold} {input.ragtag} -o {wildcards.sample}/"
+
 rule busco:
     input:
         target = "{sample}/ragtag/ref.guide.scaffold.fasta"
