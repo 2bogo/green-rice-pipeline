@@ -3,14 +3,12 @@ ONT_PATH = "/data/yeah-zin/greenRice2/seq/ont/"
 MGI_PATH = "/data/yeah-zin/greenRice2/seq/mgi/"
 REF_PATH = "/data/yeah-zin/greenRice2/seq/ref/"
 
-LRS_PATH = "~/Downloads/lrscaf/target/"
-
 workdir: BASE_DIR
 
 SAMPLES, = glob_wildcards(ONT_PATH + "{sample}.fastq.gz")
 
 rule all:
-    input: expand("{sample}/busco/short_summary.specific.liliopsida_odb10.{sample}.txt", sample=SAMPLES)
+    input: expand("{sample}/multi_polishing/03_rundir/genome.nextpolish.fasta", sample=SAMPLES)
 
 rule assembly:
     input:
@@ -19,60 +17,40 @@ rule assembly:
         "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta"
     shell: """
         mkdir -p {wildcards.sample}/denovo
-        ls {ONT_PATH}/{wildcards.sample}.fastq.gz > {wildcards.sample}/denovo/input.fofn
+        ls {ONT_PATH}{wildcards.sample}.fastq.gz > {wildcards.sample}/denovo/input.fofn
         cp script/run.cfv {wildcards.sample}/denovo/
         nextDenovo {wildcards.sample}/denovo/run.cfv
     """
 
-rule polishing:
+rule polishing1:
     input:
         "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta"
     output:
-        "{sample}/polishing/01_rundir/genome.nextpolish.fasta"
+        "{sample}/multi_polishing/01_rundir/genome.nextpolish.fasta"
     shell: """
-        mkdir -p {wildcards.sample}/polishing
-        ls {MGI_PATH}/{wildcards.sample}/* > {wildcards.sample}/polishing/sgs.fofn
-        cp script/run.cfg {wildcards.sample}/polishing/
-        nextPolish {wildcards.sample}/polishing/run.cfg
+        mkdir -p {wildcards.sample}/multi_polishing
+        ls {MGI_PATH}{wildcards.sample}/qc/*_paired.fq.gz > {wildcards.sample}/multi_polishing/sgs.fofn
+        ls {ONT_PATH}{wildcards.sample}.fastq.gz > {wildcards.sample}/multi_polishing/lgs.fofn
+        cp script/run1.cfg {wildcards.sample}/multi_polishing/
+        nextPolish {wildcards.sample}/multi_polishing/run1.cfg
     """
 
-rule scaffolding:
+rule polishing2:
     input:
-        target = "{sample}/polishing/01_rundir/genome.nextpolish.fasta", query = ONT_PATH + "{sample}.fastq.gz"
+        "{sample}/multi_polishing/01_rundir/genome.nextpolish.fasta"
     output:
-        "{sample}/scaffolding/scaffolds.fasta"
+        "{sample}/multi_polishing/02_rundir/genome.nextpolish.fasta"
     shell: """
-        mkdir -p {wildcards.sample}/scaffolding
-        minimap2 -d {wildcards.sample}/scaffolding/target.mmi {input.target}
-        minimap2 -t 8 {wildcards.sample}/scaffolding/target.mmi {input.query} > {wildcards.sample}/scaffolding/aln.mm
-        java -jar {LRS_PATH}LRScaf-1.1.12.jar -c {input.target} -a {wildcards.sample}/scaffolding/aln.mm -t mm -o {wildcards.sample}/scaffolding
+        cp script/run2.cfg {wildcards.sample}/multi_polishing/
+        nextPolish {wildcards.sample}/multi_polishing/run2.cfg
     """
 
-rule ragtag:
+rule polishing3:
     input:
-        query = "{sample}/scaffolding/scaffolds.fasta", ref = REF_PATH + "Osativa_323_v7.0.fa.gz"
+        "{sample}/multi_polishing/02_rundir/genome.nextpolish.fasta"
     output:
-        "{sample}/ragtag/ref.guide.scaffold.fasta"
+        "{sample}/multi_polishing/03_rundir/genome.nextpolish.fasta"
     shell: """
-        mkdir -p {wildcards.sample}/ragtag
-        ragtag.py scaffold -o {wildcards.sample}/ragtag {input.ref} {input.query}
-        sed 's/_RagTag//g' {wildcards.sample}/ragtag/ragtag.scaffold.fasta > {wildcards.sample}/ragtag/ref.guide.scaffold.fasta
-    """
-
-rule statistics:
-    input:
-        denovo = "{sample}/denovo/01_rundir/03.ctg_graph/nd.asm.fasta", polish = "{sample}/polishing/01_rundir/genome.nextpolish.fasta",
-        scaffold = "{sample}/scaffolding/scaffolds.fasta", ragtag="{sample}/ragtag/ref.guide.scaffold.fasta"
-    output:
-        "{sample}/N_statistics.csv"
-    shell: "python3 ../analysis/N_statistics.py {input.denovo} {input.polish} {input.scaffold} {input.ragtag} -o {wildcards.sample}/"
-
-rule busco:
-    input:
-        target = "{sample}/ragtag/ref.guide.scaffold.fasta"
-    output:
-        "{sample}/busco/short_summary.specific.liliopsida_odb10.{sample}.txt"
-    shell: """
-        mkdir -p {wildcards.sample}/busco
-        busco -f -c 10 -i {input.target} -o {wildcards.sample}/busco  -m genome -l liliopsida_odb10 --augustus --long
+        cp script/run3.cfg {wildcards.sample}/multi_polishing/
+        nextPolish {wildcards.sample}/multi_polishing/run3.cfg
     """
