@@ -1,0 +1,25 @@
+BASE_DIR = "./"
+RNA_DIR = "/data/yeah-zin/greenRice2/seq/mgi/paired/baegilmi/"
+
+REF = "/data/yeah-zin/greenRice2/repeat/baegilmi/ref.guide.scafoold.fasta.masked"
+
+IX = "baegilmi"
+
+workdir: BASE_DIR
+
+RNAFILES, = glob_wildcards(RNA_DIR + "{file}_1.qc.fq.gz")
+
+rule all:
+    input: expand("hisat2/{file}.bam", file=RNAFILES)
+
+rule hisat2:
+    input:
+        fwd=RNA_DIR + "{file}_1.qc.fq.gz", rev=RNA_DIR + "{file}_2.qc.fq.gz"
+    params:
+        ix=IX
+    output:
+        "hisat2/{file}.bam"
+    shell: """
+        mkdir -p hisat2
+        hisat2 -p 10 -x {params.ix} -1 {input.fwd} -2 {input.rev} | sambamba view -f bam -o {output} -S /dev/stdin
+    """
