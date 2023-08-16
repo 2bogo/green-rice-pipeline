@@ -1,18 +1,15 @@
 BASE_DIR = './'
-ONT_PATH = "/data/yeah-zin/greenRice2/seq/ont/"
-
 
 workdir: BASE_DIR
 
-SAMPLES, = glob_wildcards(ONT_PATH + "{sample}.fastq.gz")
+SAMPLES, = glob_wildcards(BASE_DIR + "{sample}_1.fq.gz")
 
 rule all:
-    input: expand("{sample}/qc/output_forward_paired.fq.gz", sample=SAMPLES), expand("{sample}/qc/output_forward_unpaired.fq.gz", sample=SAMPLES), expand("{sample}/qc/output_reverse_paired.fq.gz", sample=SAMPLES), expand("{sample}/qc/output_reverse_unpaired.fq.gz", sample=SAMPLES)
+    input: expand("paired/{sample}_1.qc.fq.gz", sample=SAMPLES), expand("unpaired/{sample}_1.unp.fq.gz", sample=SAMPLES), expand("paired/{sample}_2.qc.fq.gz", sample=SAMPLES), expand("unpaired/{sample}_2.unp.fq.gz", sample=SAMPLES)
 
 rule qc:
-    input: "{sample}/R1.fq.gz", "{sample}/R2.fq.gz"
-    output: "{sample}/qc/output_forward_paired.fq.gz", "{sample}/qc/output_forward_unpaired.fq.gz", "{sample}/qc/output_reverse_paired.fq.gz", "{sample}/qc/output_reverse_unpaired.fq.gz"
+    input: "{sample}_1.fq.gz", "{sample}_2.fq.gz"
+    output: "paired/{sample}_1.qc.fq.gz", "unpaired/{sample}_1.unp.fq.gz", "paired/{sample}_2.qc.fq.gz", "unpaired/{sample}_2.unp.fq.gz"
     shell: """
-        mkdir -p {wildcards.sample}/qc
-        java -jar ~/Downloads/Trimmomatic-0.39/dist/jar/trimmomatic-0.39.jar PE -threads 20 {input} {output} ILLUMINACLIP:bacode.fa:2:30:10 LEADING:3 TRAILING:3 MINLEN:36
+        java -jar ~/Downloads/Trimmomatic/dist/jar/trimmomatic-0.40-rc1.jar PE -threads 20 {input} {output} ILLUMINACLIP:bacode.fa:2:30:10 LEADING:3 TRAILING:3 MINLEN:36
     """
