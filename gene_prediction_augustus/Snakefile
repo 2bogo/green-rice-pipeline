@@ -1,0 +1,29 @@
+BASE_DIR = './'
+ONT_PATH = "/data/yeah-zin/greenRice2/seq/ont/"
+
+PY="/home/ezy/Downloads/biocode/gff"
+
+workdir: BASE_DIR
+
+SAMPLES, = glob_wildcards(ONT_PATH + "{sample}.fastq.gz")
+
+rule all:
+    input: expand("{sample}_augustus.convert.gff3", sample=SAMPLES)
+
+rule augustus:
+    input:
+        cfg="/data/yeah-zin/greenRice2/assembly/{sample}/multi_busco/run_liliopsida_odb10/augustus_output/retraining_parameters/BUSCO_multi_busco/BUSCO_multi_busco_parameters.cfg",
+        masked="/data/yeah-zin/greenRice2/repeat/{sample}/ref.guide.scaffold.fasta.masked"
+    output:
+        "{sample}_augustus.gff3"
+    shell: """
+        augustus --softmasking=false --species=rice --genemodel=complete --gff3=on --strand=both --extrinsicCfgFile={input.cfg} {input.masked} > {output}
+    """
+
+rule convert_augustus_to_gff3:
+    input: "{sample}_augustus.gff3"
+    output: "{sample}_augustus.convert.gff3"
+    params: cmd=PY
+    shell: """
+        {params.cmd}/convert_augustus_to_gff3.py -i {input} -o {output}
+    """
