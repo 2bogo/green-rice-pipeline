@@ -1,0 +1,147 @@
+BASE_DIR = "./"
+
+SAMPLE = "jopyeong"
+
+RNA_DIR = f"/data/yeah-zin/greenRice2/seq/mgi/paired/{SAMPLE}/"
+REF = f"/data/yeah-zin/greenRice2/repeat/{SAMPLE}/ref.guide.scaffold.fasta.masked"
+
+TRANSDECODER = "/home/ezy/Downloads/TransDecoder-TransDecoder-v5.7.0"
+CUFF="/home/ezy/Downloads/cufflinks-2.2.1.Linux_x86_64"
+PFAM="/data/yeah-zin/greenRice2/data/Pfam-A.hmm"
+PY="/data/yeah-zin/greenRice2/gene_prediction_rna/py"
+GT="/home/ezy/Downloads/genometools-1.6.2/bin"
+AUGUSTUS="/data/yeah-zin/greenRice2/gene_prediction_augustus"
+
+
+
+workdir: BASE_DIR
+
+RNAFILES, = glob_wildcards(RNA_DIR + "{file}_1.qc.fq.gz")
+
+rule all:
+    input: f"final/{SAMPLE}.pep.fa"
+
+rule hisat2build:
+    input: REF
+    output: "{SAMPLE}.8.ht2"
+    shell: 
+        "hisat2-build -p 8 {input} {SAMPLE}"
+
+rule hisat2:
+    input:
+        fwd=RNA_DIR + "{file}_1.qc.fq.gz", rev=RNA_DIR + "{file}_2.qc.fq.gz", build=f"{SAMPLE}.8.ht2"
+    params:
+        ix=SAMPLE
+    output:
+        "hisat2/{file}.bam"
+    shell: """
+        mkdir -p hisat2
+        hisat2 -p 10 -x {params.ix} -1 {input.fwd} -2 {input.rev} | sambamba view -f bam -o {output} -S /dev/stdin
+    """
+
+rule sort:
+    input: "hisat2/{file}.bam"
+    output: "hisat2/{file}.sorted.bam"
+    shell: "sambamba sort -t 8 -o {output} {input}"
+
+rule merge:
+    input: expand("hisat2/{file}.sorted.bam", file=RNAFILES)
+    output: "hisat2/{SAMPLE}.merged.bam"
+    shell: "sambamba merge -t 8 {output} {input}"
+
+rule stringtie:
+    input: "hisat2/{SAMPLE}.merged.bam"
+    output: "stringtie/{SAMPLE}.merged.stringtie.gtf"
+    shell: """
+        mkdir -p stringtie
+        stringtie -p 8 -o {output} {input}
+    """
+
+rule gff2cds:
+    input:
+        gff="stringtie/{SAMPLE}.merged.stringtie.gtf", ref=REF
+    output:
+        "stringtie/{SAMPLE}.merged.stringtie.gtf.cdna.fa"
+    params:
+        cmd=TRANSDECODER
+    shell:
+        "{params.cmd}/util/gtf_genome_to_cdna_fasta.pl {input.gff} {input.ref} > {output}"
+
+rule transdecoder_longOrfs:
+    input: "stringtie/{SAMPLE}.merged.stringtie.gtf.cdna.fa"
+    output: "{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder_dir/longest_orfs.pep"
+    params:
+        cmd=TRANSDECODER
+    shell:"""
+        "{params.cmd}/TransDecoder.LongOrfs -t {input}"
+    """
+
+rule hmm:
+    input: "{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder_dir/longest_orfs.pep"
+    output: "{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder_dir/pfam.domtblout"
+    params: pfam=PFAM
+    shell:
+        "hmmscan --cpu 5 --domtblout {output} {params.pfam} {input}"
+
+rule transdecoder_predict:
+    input: fa="stringtie/{SAMPLE}.merged.stringtie.gtf.cdna.fa", pfam="{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder_dir/pfam.domtblout"
+    output: "{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder.gff3"
+    params: cmd=TRANSDECODER
+    shell: """
+        mkdir -p transdecoder_predict
+        {params.cmd}/TransDecoder.Predict --cpu 5 -t {input.fa} --retain_pfam_hits {input.pfam}
+        mv {SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder.* transdecoder_predict/
+    """
+
+rule transdecoder_togenome:
+    input: sgtf="stringtie/{SAMPLE}.merged.stringtie.gtf", tgff="transdecoder_predict/{SAMPLE}.merged.stringtie.gtf.cdna.fa.transdecoder.gff3"
+    output: "transdecoder_predict/{SAMPLE}.merged.stringtie.transcoder.genome.gff"
+    params: cmd=PY
+    shell: "python {params.cmd}/stringtieAddCDS.py --gtf {input.sgtf} --transdecoder {input.tgff} -o {output}"
+
+rule add_gene:
+    input: "transdecoder_predict/{SAMPLE}.merged.stringtie.transcoder.genome.gff"
+    output: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.gff"
+    params: cmd=PY
+    shell: """
+        mkdir -p add_gene
+        python {params.cmd}/addGene.py --gff {input} -o {output}
+    """
+
+rule gt_sort:
+    input: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.gff"
+    output: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff"
+    params: cmd=GT
+    shell: "{params.cmd}/gt gff3 -sort -retainids {input} > {output}"
+
+rule addgene_gff2cds:
+    input: gff="add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff", fa=REF
+    output: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.cds.fa"
+    params: cmd=PY
+    shell: "python {params.cmd}/gff2cds.py --gff {input.gff} --fa {input.fa} --out {output}"
+
+
+rule cds2pep:
+    input: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.cds.fa"
+    output: "add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.pep.fa"
+    params: cmd=PY
+    shell: "python {params.cmd}/cds2pep.py --cds {input} --out {output}"
+
+rule cuffcompare:
+    input: gff="add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff", aug_gff=AUGUSTUS+"/{SAMPLE}_augustus.convert.gff3" ,pep="add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.pep.fa"
+    output: "cuffcompare/cuffcmp.{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.tmap"
+    params: cmd=CUFF
+    shell: """
+        mkdir -p cuffcompare
+        {params.cmd}/cuffcompare -r {input.aug_gff} {input.gff}
+        mv cuffcmp.* cuffcompare/
+    """
+
+rule cuffmerge:
+    input: gff="add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff", rgff=AUGUSTUS+"/{SAMPLE}_augustus.convert.gff3", tmap="cuffcompare/cuffcmp.{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.tmap", pep="add_gene/{SAMPLE}.merged.stringtie.transcoder.addgene.sort.gff.pep.fa"
+    output: gff="final/{SAMPLE}.gff3", pep="final/{SAMPLE}.pep.fa"
+    params: cmd=PY
+    shell: """
+        mkdir -p final
+        python {params.cmd}/2gff2integrate.py --gff {input.gff} --rgff {input.rgff} --tmap {input.tmap} --pep {input.pep} --out {output.gff} --outpep {output.pep}
+    """
